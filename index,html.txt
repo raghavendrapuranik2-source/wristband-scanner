@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://unpkg.com/html5-qrcode"></script>
+<style>
+body{font-family:Arial;text-align:center}
+#reader{width:300px;margin:auto}
+#card{margin-top:15px;padding:15px;border:1px solid #ccc}
+button{margin:6px;padding:10px 18px}
+</style>
+</head>
+<body>
+
+<h3>Wristband Distribution</h3>
+
+<input id="volunteer" placeholder="Volunteer name"><br><br>
+
+<div id="reader"></div>
+
+<div id="card" hidden>
+<p><b>ID:</b> <span id="sid"></span></p>
+<p><b>Name:</b> <span id="name"></span></p>
+<button onclick="saveEntry()">Next</button>
+<button onclick="clearEntry()">Clear</button>
+</div>
+
+<br>
+<button onclick="pushAll()">Push to Sheet</button>
+<p id="count">Stored: 0</p>
+
+<script>
+const API = "https://script.google.com/macros/s/AKfycbxvSYAIYARKxGTXy_9wdR7Dqy87Nop5nPsXYiTd0OGw5tyu9R1ywsLg8fkFjXsHWjLypA/exec";
+
+let scanner, currentEntry=null;
+let entries=[];
+let localIds=new Set();
+
+function apiCall(action,data){
+  return fetch(API+"?action="+action,{
+    method:"POST",
+    body:JSON.stringify(data)
+  }).then(r=>r.json());
+}
+
+function startScanner(){
+  scanner=new Html5Qrcode("reader");
+  scanner.start(
+    {facingMode:"environment"},
+    {fps:10,qrbox:250},
+    txt=>stopScanner(()=>lookup(txt.trim())),
+    ()=>{}
+  );
+}
+
+function stopScanner(cb){
+  if(!scanner) return cb();
+  scanner.stop().then(()=>{scanner.clear();scanner=null;cb();});
+}
+
+function lookup(id){
+  if(localIds.has(id)){alert("Duplicate local");startScanner();return;}
+  apiCall("lookup",{id}).then(res=>{
+    if(res.status!=="OK"){alert(res.status);startScanner();return;}
+    currentEntry={id:res.id,name:res.name,scanTime:new Date().toISOString()};
+    document.getElementById("sid").innerText=res.id;
+    document.getElementById("name").innerText=res.name;
+    document.getElementById("card").hidden=false;
+  });
+}
+
+function saveEntry(){
+  apiCall("reserve",{id:currentEntry.id,device:navigator.userAgent})
+  .then(res=>{
+    if(res.status!=="OK"){alert("Duplicate");startScanner();return;}
+    entries.push(currentEntry);
+    localIds.add(currentEntry.id);
+    currentEntry=null;
+    updateCount();
+    startScanner();
+  });
+}
+
+function clearEntry(){currentEntry=null;startScanner();}
+
+function pushAll(){
+  const v=document.getElementById("volunteer").value.trim();
+  if(!v||!entries.length)return alert("Missing data");
+  apiCall("push",{entries,volunteer:v}).then(res=>{
+    alert(res.count+" pushed");
+    entries=[];localIds.clear();updateCount();
+  });
+}
+
+function updateCount(){
+  document.getElementById("count").innerText="Stored: "+entries.length;
+}
+
+window.onload=startScanner;
+</script>
+</body>
+</html>
