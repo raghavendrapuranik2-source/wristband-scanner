@@ -5,7 +5,7 @@
 <script src="https://unpkg.com/html5-qrcode"></script>
 <style>
   body { font-family: Arial; text-align: center; }
-  #reader { width: 320px; margin: auto; }
+  #reader { width: 320px; margin: auto; margin-top: 20px; }
   button { padding:10px 15px; margin:6px; }
 </style>
 </head>
@@ -15,6 +15,8 @@
 <h3>Wristband Distribution</h3>
 
 <input id="volunteer" placeholder="Enter Volunteer Name"><br><br>
+
+<button onclick="startScanner()">Start Scanner</button>
 
 <div id="reader"></div>
 
@@ -34,7 +36,7 @@
 
 const API = "https://script.google.com/macros/s/AKfycbx0toWkHIDhPvzs3cpjtM3cPuMYbIM_RFrxLoPU4IDdkuyoabeT6XSf1KRqbzN8Vm5CsA/exec";
 
-let scanner;
+let scanner = null;
 let MASTER_MAP = {};
 let currentEntry = null;
 let entries = [];
@@ -42,11 +44,13 @@ let entries = [];
 /* =========================
    SAFE LOCAL STORAGE
 ========================= */
-function saveLocalData() {
-  localStorage.setItem("wristband_entries", JSON.stringify(entries));
+function saveLocalData(){
+  try {
+    localStorage.setItem("wristband_entries", JSON.stringify(entries));
+  } catch(e){}
 }
 
-function loadLocalData() {
+function loadLocalData(){
   try {
     const data = localStorage.getItem("wristband_entries");
     if (data) {
@@ -57,18 +61,27 @@ function loadLocalData() {
     } else {
       entries = [];
     }
-  } catch (e) {
-    console.log("Corrupted storage cleared");
+  } catch(e){
     localStorage.removeItem("wristband_entries");
     entries = [];
   }
   updateCount();
 }
 
-function clearLocalData() {
+function clearLocalData(){
   localStorage.removeItem("wristband_entries");
   entries = [];
   updateCount();
+}
+
+/* =========================
+   SAFE COUNT UPDATE
+========================= */
+function updateCount(){
+  const el = document.getElementById("count");
+  if (el) {
+    el.innerText = "Stored: " + entries.length;
+  }
 }
 
 /* =========================
@@ -88,12 +101,17 @@ function apiCall(action,data){
    LOAD MASTER
 ========================= */
 function loadMaster(){
-  return apiCall("getMaster",{}).then(res=>{
+  return apiCall("getMaster",{})
+  .then(res=>{
     if(res.status==="OK"){
       MASTER_MAP = res.data;
     } else {
       alert("Failed to load master list");
     }
+  })
+  .catch(err=>{
+    console.log(err);
+    alert("Backend connection failed");
   });
 }
 
@@ -101,6 +119,11 @@ function loadMaster(){
    START SCANNER
 ========================= */
 function startScanner(){
+
+  if(typeof Html5Qrcode === "undefined"){
+    alert("QR library failed to load");
+    return;
+  }
 
   document.getElementById("card").hidden = true;
 
@@ -143,6 +166,9 @@ function stopScanner(callback){
     scanner.clear();
     scanner=null;
     if(callback) callback();
+  }).catch(()=>{
+    scanner=null;
+    if(callback) callback();
   });
 }
 
@@ -160,15 +186,15 @@ function lookup(id){
   apiCall("checkReservation",{id}).then(res=>{
 
     if(res.status !== "CLEAR"){
-      alert("Duplicate - already " + res.status);
+      alert("Duplicate - already reserved");
       startScanner();
       return;
     }
 
     currentEntry = {
-      id: id,
-      name: MASTER_MAP[id],
-      scanTime: new Date().toISOString()
+      id:id,
+      name:MASTER_MAP[id],
+      scanTime:new Date().toISOString()
     };
 
     document.getElementById("sid").innerText=id;
@@ -189,10 +215,8 @@ function saveEntry(){
     device: navigator.userAgent
   })
   .then(res=>{
-
     if(res.status !== "OK"){
-      alert("Duplicate - already " + res.status);
-      currentEntry=null;
+      alert("Duplicate - already reserved");
       startScanner();
       return;
     }
@@ -234,7 +258,7 @@ function pushAll(){
   })
   .then(res=>{
     if(res.status==="OK"){
-      alert(res.count + " pushed successfully");
+      alert(res.count+" pushed successfully");
       clearLocalData();
     } else {
       alert(res.message);
@@ -243,22 +267,12 @@ function pushAll(){
 }
 
 /* =========================
-   UPDATE COUNT
-========================= */
-function updateCount(){
-  document.getElementById("count").innerText =
-    "Stored: " + entries.length;
-}
-
-/* =========================
    INIT
 ========================= */
-window.onload = function(){
+window.addEventListener("load", function(){
   loadLocalData();
-  loadMaster().then(()=>{
-    startScanner();
-  });
-};
+  loadMaster();
+});
 
 </script>
 
