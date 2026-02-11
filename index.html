@@ -3,13 +3,34 @@
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://unpkg.com/html5-qrcode"></script>
+
 <style>
-body{font-family:Arial;text-align:center}
-#reader{width:300px;margin:auto}
-#card{margin-top:15px;padding:15px;border:1px solid #ccc}
-button{margin:6px;padding:10px 18px}
+body{
+  font-family:Arial;
+  text-align:center;
+}
+#reader{
+  width:320px;
+  margin:auto;
+}
+#card{
+  margin-top:15px;
+  padding:15px;
+  border:1px solid #ccc;
+  border-radius:6px;
+  min-height:80px;
+}
+button{
+  margin:6px;
+  padding:10px 18px;
+  font-size:15px;
+}
+.loading{
+  color:#888;
+}
 </style>
 </head>
+
 <body>
 
 <h3>Wristband Distribution</h3>
@@ -19,10 +40,11 @@ button{margin:6px;padding:10px 18px}
 <div id="reader"></div>
 
 <div id="card" hidden>
-<p><b>ID:</b> <span id="sid"></span></p>
-<p><b>Name:</b> <span id="name"></span></p>
-<button onclick="saveEntry()">Next</button>
-<button onclick="clearEntry()">Clear</button>
+  <p><b>ID:</b> <span id="sid"></span></p>
+  <p><b>Name:</b> <span id="name"></span></p>
+
+  <button onclick="saveEntry()">Next</button>
+  <button onclick="clearEntry()">Clear</button>
 </div>
 
 <br>
@@ -31,7 +53,7 @@ button{margin:6px;padding:10px 18px}
 
 <script>
 
-const API = "https://script.google.com/macros/s/AKfycbx0A3P1hVHSq2G9dcZm3JSxFUvrrb9T3wQAU0l7OQP_Mmb1VM4LZVX_h5NuAIsUqy7Fgg/exec";
+const API = "https://script.google.com/macros/s/AKfycbyW9HsDtZudgcpYuV7tV3rXfeCSSFhOE4ePYJpGl-FZYgwM3SfD5CnhoeDJ2SUIJfgSBQ/exec";  // 🔴 replace
 
 let scanner;
 let currentEntry = null;
@@ -68,19 +90,21 @@ function apiCall(action, data){
 
 function startScanner(){
   scanner = new Html5Qrcode("reader");
+
   scanner.start(
-    {facingMode:"environment"},
-    {fps:10,qrbox:250},
-    txt => stopScanner(() => lookup(txt.trim())),
+    { facingMode:"environment" },
+    { fps:10, qrbox:250 },
+    text => stopScanner(() => lookup(text.trim())),
     () => {}
   );
 }
 
 function stopScanner(cb){
   if(!scanner) return cb();
+
   scanner.stop().then(()=>{
     scanner.clear();
-    scanner=null;
+    scanner = null;
     cb();
   });
 }
@@ -88,6 +112,11 @@ function stopScanner(cb){
 /* ================= LOOKUP ================= */
 
 function lookup(id){
+
+  // 🔥 Clear old data immediately
+  document.getElementById("sid").innerText = "";
+  document.getElementById("name").innerText = "Loading...";
+  document.getElementById("card").hidden = false;
 
   if(localIds.has(id)){
     alert("Duplicate (local)");
@@ -103,15 +132,14 @@ function lookup(id){
       return;
     }
 
-    currentEntry={
-      id:res.id,
-      name:res.name,
-      scanTime:new Date().toISOString()
+    currentEntry = {
+      id: res.id,
+      name: res.name,
+      scanTime: new Date().toISOString()
     };
 
-    document.getElementById("sid").innerText=res.id;
-    document.getElementById("name").innerText=res.name;
-    document.getElementById("card").hidden=false;
+    document.getElementById("sid").innerText = res.id;
+    document.getElementById("name").innerText = res.name;
   });
 }
 
@@ -119,9 +147,11 @@ function lookup(id){
 
 function saveEntry(){
 
+  if(!currentEntry) return;
+
   apiCall("reserve",{
-    id:currentEntry.id,
-    device:navigator.userAgent
+    id: currentEntry.id,
+    device: navigator.userAgent
   }).then(res=>{
 
     if(!res || res.status!=="OK"){
@@ -132,8 +162,10 @@ function saveEntry(){
 
     entries.push(currentEntry);
     localIds.add(currentEntry.id);
-    currentEntry=null;
+    currentEntry = null;
+
     updateCount();
+    document.getElementById("card").hidden = true;
     startScanner();
   });
 }
@@ -141,7 +173,8 @@ function saveEntry(){
 /* ================= CLEAR ================= */
 
 function clearEntry(){
-  currentEntry=null;
+  currentEntry = null;
+  document.getElementById("card").hidden = true;
   startScanner();
 }
 
@@ -149,7 +182,7 @@ function clearEntry(){
 
 function pushAll(){
 
-  const v=document.getElementById("volunteer").value.trim();
+  const v = document.getElementById("volunteer").value.trim();
 
   if(!v || !entries.length){
     alert("Missing data");
@@ -170,11 +203,13 @@ function pushAll(){
 }
 
 function updateCount(){
-  document.getElementById("count").innerText="Stored: "+entries.length;
+  document.getElementById("count").innerText =
+    "Stored: " + entries.length;
 }
 
-window.onload=startScanner;
+window.onload = startScanner;
 
 </script>
+
 </body>
 </html>
