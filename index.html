@@ -1,52 +1,40 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<script src="https://unpkg.com/html5-qrcode"></script>
-</head>
-<body>
-
-<h3>Wristband Distribution</h3>
-
-<input id="volunteer" placeholder="Volunteer name"><br><br>
-<div id="reader" style="width:320px;margin:auto;"></div>
-
-<div id="card" hidden>
-  <p><b>ID:</b> <span id="sid"></span></p>
-  <p><b>Name:</b> <span id="name"></span></p>
-  <button onclick="saveEntry()">Next</button>
-  <button onclick="clearEntry()">Clear</button>
-</div>
-
-<br>
-<button onclick="pushAll()">Push to Sheet</button>
-<p id="count">Stored: 0</p>
-
 <script>
 
-const API="https://script.google.com/macros/s/AKfycbx0toWkHIDhPvzs3cpjtM3cPuMYbIM_RFrxLoPU4IDdkuyoabeT6XSf1KRqbzN8Vm5CsA/exec";
+const API = "https://script.google.com/macros/s/AKfycbx0toWkHIDhPvzs3cpjtM3cPuMYbIM_RFrxLoPU4IDdkuyoabeT6XSf1KRqbzN8Vm5CsA/exec";
+
 let scanner;
 let MASTER_MAP = {};
-let currentEntry=null;
-let entries=[];
-let localIds=new Set();
+let currentEntry = null;
+let entries = [];
 
-/* ================= LOAD MASTER ON PAGE LOAD ================= */
-
-function loadMaster(){
-  return apiCall("getMaster",{}).then(res=>{
-    if(res.status==="OK"){
-      MASTER_MAP = res.data;
-    }else{
-      alert("Failed to load master list");
-    }
-  });
+/* =========================
+   STORAGE HELPERS
+========================= */
+function saveLocalData() {
+  localStorage.setItem("wristband_entries", JSON.stringify(entries));
 }
 
-/* ================= API CALL ================= */
+function loadLocalData() {
+  const data = localStorage.getItem("wristband_entries");
+  if (data) {
+    entries = JSON.parse(data);
+  } else {
+    entries = [];
+  }
+  updateCount();
+}
 
+function clearLocalData() {
+  localStorage.removeItem("wristband_entries");
+  entries = [];
+  updateCount();
+}
+
+/* =========================
+   API CALL
+========================= */
 function apiCall(action,data){
-  const params=new URLSearchParams();
+  const params = new URLSearchParams();
   params.append("action",action);
   for(let k in data){
     params.append(k,data[k]);
@@ -55,65 +43,74 @@ function apiCall(action,data){
     .then(r=>r.json());
 }
 
-/* ================= SCANNER ================= */
-
-function startScanner(){
-  scanner=new Html5Qrcode("reader");
-  scanner.start(
-    {facingMode:"environment"},
-    {fps:10,qrbox:250},
-    txt=>stopScanner(()=>lookup(txt.trim())),
-    ()=>{}
-  );
+/* =========================
+   LOAD MASTER
+========================= */
+function loadMaster(){
+  return apiCall("getMaster",{}).then(res=>{
+    if(res.status==="OK"){
+      MASTER_MAP = res.data;
+    } else {
+      alert("Master load failed");
+    }
+  });
 }
 
-function stopScanner(cb){
-  if(!scanner)return cb();
-  scanner.stop().then(()=>{scanner.clear();scanner=null;cb();});
-}
-
-/* ================= LOOKUP ================= */
-
+/* =========================
+   LOOKUP
+========================= */
 function lookup(id){
 
-  document.getElementById("sid").innerText="";
-  document.getElementById("name").innerText="Checking...";
-  document.getElementById("card").hidden=false;
-
-  // 1️⃣ Check Master locally
   if(!MASTER_MAP[id]){
-    alert("INVALID ID");
+    alert("Invalid ID");
     startScanner();
     return;
   }
 
-  // 2️⃣ Check reservation from server
   apiCall("checkReservation",{id}).then(res=>{
 
-    if(res.status==="DUPLICATE"){
-      alert("DUPLICATE");
+    if(res.status !== "CLEAR"){
+      alert("Duplicate - already " + res.status);
       startScanner();
       return;
     }
 
-    currentEntry={
-      id:id,
-      name:MASTER_MAP[id],
-      scanTime:new Date().toISOString()
+    currentEntry = {
+      id: id,
+      name: MASTER_MAP[id],
+      scanTime: new Date().toISOString()
     };
 
     document.getElementById("sid").innerText=id;
     document.getElementById("name").innerText=MASTER_MAP[id];
+    document.getElementById("card").hidden=false;
   });
 }
 
-/* ================= NEXT ================= */
-
+/* =========================
+   SAVE ENTRY
+========================= */
 function saveEntry(){
-  apiCall("reserve",{id:currentEntry.id,device:navigator.userAgent})
-  .then(()=>{
+
+  if(!currentEntry) return;
+
+  apiCall("reserve",{
+    id: currentEntry.id,
+    device: navigator.userAgent
+  })
+  .then(res=>{
+
+    if(res.status !== "OK"){
+      alert("Duplicate - already " + res.status);
+      currentEntry=null;
+      document.getElementById("card").hidden=true;
+      startScanner();
+      return;
+    }
+
     entries.push(currentEntry);
-    localIds.add(currentEntry.id);
+    saveLocalData(); // 🔥 persist immediately
+
     currentEntry=null;
     document.getElementById("card").hidden=true;
     updateCount();
@@ -121,44 +118,53 @@ function saveEntry(){
   });
 }
 
-function clearEntry(){
-  currentEntry=null;
-  document.getElementById("card").hidden=true;
-  startScanner();
-}
-
+/* =========================
+   PUSH
+========================= */
 function pushAll(){
+
   const v=document.getElementById("volunteer").value.trim();
-  apiCall("push",{entries:JSON.stringify(entries),volunteer:v})
+
+  if(!v){
+    alert("Volunteer name required");
+    return;
+  }
+
+  if(!entries.length){
+    alert("No entries to push");
+    return;
+  }
+
+  apiCall("push",{
+    entries: JSON.stringify(entries),
+    volunteer: v
+  })
   .then(res=>{
-    alert(res.count+" pushed");
-    entries=[];
-    localIds.clear();
-    updateCount();
+    if(res.status==="OK"){
+      alert(res.count + " pushed successfully");
+      clearLocalData();  // 🔥 clear only after success
+    } else {
+      alert(res.message);
+    }
   });
 }
 
+/* =========================
+   COUNT
+========================= */
 function updateCount(){
-  document.getElementById("count").innerText="Stored: "+entries.length;
+  document.getElementById("count").innerText =
+    "Stored: " + entries.length;
 }
 
-/* ================= INIT ================= */
-
-window.onload=()=>{
+/* =========================
+   INIT
+========================= */
+window.onload = function(){
+  loadLocalData();   // 🔥 restore entries on refresh
   loadMaster().then(()=>{
     startScanner();
   });
 };
 
 </script>
-</body>
-</html>
-
-
-
-
-
-
-
-
-
