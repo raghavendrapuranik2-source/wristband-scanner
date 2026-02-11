@@ -16,8 +16,6 @@
 
 <input id="volunteer" placeholder="Enter Volunteer Name"><br><br>
 
-<button onclick="startScanner()">Start Scanner</button>
-
 <div id="reader"></div>
 
 <div id="card" hidden>
@@ -34,7 +32,7 @@
 
 <script>
 
-const API = "https://script.google.com/macros/s/AKfycbx0toWkHIDhPvzs3cpjtM3cPuMYbIM_RFrxLoPU4IDdkuyoabeT6XSf1KRqbzN8Vm5CsA/exec";
+const API = "https://script.google.com/macros/s/AKfycbwa569wwlblfwO87zYJ84DWAR4K3fWt1A8ZbXt8PjAtYzW3XetneaZJtr9_5E8XnoG3-g/exec";
 
 let scanner = null;
 let MASTER_MAP = {};
@@ -42,7 +40,7 @@ let currentEntry = null;
 let entries = [];
 
 /* =========================
-   SAFE LOCAL STORAGE
+   LOCAL STORAGE (SAFE)
 ========================= */
 function saveLocalData(){
   try {
@@ -55,9 +53,7 @@ function loadLocalData(){
     const data = localStorage.getItem("wristband_entries");
     if (data) {
       entries = JSON.parse(data);
-      if (!Array.isArray(entries)) {
-        entries = [];
-      }
+      if (!Array.isArray(entries)) entries = [];
     } else {
       entries = [];
     }
@@ -186,7 +182,7 @@ function lookup(id){
   apiCall("checkReservation",{id}).then(res=>{
 
     if(res.status !== "CLEAR"){
-      alert("Duplicate - already reserved");
+      alert("Duplicate - already " + res.status);
       startScanner();
       return;
     }
@@ -204,7 +200,7 @@ function lookup(id){
 }
 
 /* =========================
-   SAVE ENTRY
+   SAVE ENTRY (RESERVE)
 ========================= */
 function saveEntry(){
 
@@ -216,7 +212,7 @@ function saveEntry(){
   })
   .then(res=>{
     if(res.status !== "OK"){
-      alert("Duplicate - already reserved");
+      alert("Duplicate - already " + res.status);
       startScanner();
       return;
     }
@@ -236,7 +232,7 @@ function clearEntry(){
 }
 
 /* =========================
-   PUSH
+   PUSH (FINALIZE)
 ========================= */
 function pushAll(){
 
@@ -271,7 +267,9 @@ function pushAll(){
 ========================= */
 window.addEventListener("load", function(){
   loadLocalData();
-  loadMaster();
+  loadMaster().then(()=>{
+    startScanner();
+  });
 });
 
 </script>
