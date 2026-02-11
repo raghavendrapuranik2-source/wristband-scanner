@@ -5,29 +5,11 @@
 <script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
-body{
-  font-family:Arial;
-  text-align:center;
-}
-#reader{
-  width:320px;
-  margin:auto;
-}
-#card{
-  margin-top:15px;
-  padding:15px;
-  border:1px solid #ccc;
-  border-radius:6px;
-  min-height:80px;
-}
-button{
-  margin:6px;
-  padding:10px 18px;
-  font-size:15px;
-}
-.loading{
-  color:#888;
-}
+body{font-family:Arial;text-align:center}
+#reader{width:320px;margin:auto}
+#card{margin-top:15px;padding:15px;border:1px solid #ccc;border-radius:6px;min-height:80px}
+button{margin:6px;padding:10px 18px;font-size:15px}
+.loading{color:#888}
 </style>
 </head>
 
@@ -53,58 +35,52 @@ button{
 
 <script>
 
-const API = "https://script.google.com/macros/s/AKfycbwsetQdl2HFS1CsA8flZ0fuUlDG9i0LN7xFzYgzxVlEYR5TfocJsd5SPa-nhEZlS8LCcw/exec";  // 🔴 replace
+const API = "https://script.google.com/macros/s/AKfycbw7n3-arGejyNZFypckLmqJfgdrNGyiawdI6zKGtrZnW1iobdKJclbZZu6OTs398sk0rg/exec";
 
 let scanner;
-let currentEntry = null;
-let entries = [];
-let localIds = new Set();
+let currentEntry=null;
+let entries=[];
+let localIds=new Set();
 
-/* ================= API CALL ================= */
+/* ================= API ================= */
 
-function apiCall(action, data){
+function apiCall(action,data){
 
-  const params = new URLSearchParams();
-  params.append("action", action);
+  const params=new URLSearchParams();
+  params.append("action",action);
 
-  for (let key in data) {
-    if (typeof data[key] === "object") {
-      params.append(key, JSON.stringify(data[key]));
-    } else {
-      params.append(key, data[key]);
+  for(let key in data){
+    if(typeof data[key]==="object"){
+      params.append(key,JSON.stringify(data[key]));
+    }else{
+      params.append(key,data[key]);
     }
   }
 
-  return fetch(API, {
-    method: "POST",
-    body: params
+  return fetch(API,{
+    method:"POST",
+    body:params
   })
-  .then(res => res.json())
-  .catch(err => {
-    console.error("API error:", err);
-    alert("Server error");
-  });
+  .then(res=>res.json());
 }
 
 /* ================= SCANNER ================= */
 
 function startScanner(){
-  scanner = new Html5Qrcode("reader");
-
+  scanner=new Html5Qrcode("reader");
   scanner.start(
-    { facingMode:"environment" },
-    { fps:10, qrbox:250 },
-    text => stopScanner(() => lookup(text.trim())),
-    () => {}
+    {facingMode:"environment"},
+    {fps:10,qrbox:250},
+    txt=>stopScanner(()=>lookup(txt.trim())),
+    ()=>{}
   );
 }
 
 function stopScanner(cb){
-  if(!scanner) return cb();
-
+  if(!scanner)return cb();
   scanner.stop().then(()=>{
     scanner.clear();
-    scanner = null;
+    scanner=null;
     cb();
   });
 }
@@ -113,10 +89,9 @@ function stopScanner(cb){
 
 function lookup(id){
 
-  // 🔥 Clear old data immediately
-  document.getElementById("sid").innerText = "";
-  document.getElementById("name").innerText = "Loading...";
-  document.getElementById("card").hidden = false;
+  document.getElementById("sid").innerText="";
+  document.getElementById("name").innerText="Loading...";
+  document.getElementById("card").hidden=false;
 
   if(localIds.has(id)){
     alert("Duplicate (local)");
@@ -126,20 +101,24 @@ function lookup(id){
 
   apiCall("lookup",{id}).then(res=>{
 
-    if(!res || res.status!=="OK"){
-      alert(res?.status || "Error");
+    if(!res||res.status!=="OK"){
+      alert(res?.status||"Error");
       startScanner();
       return;
     }
 
-    currentEntry = {
-      id: res.id,
-      name: res.name,
-      scanTime: new Date().toISOString()
+    currentEntry={
+      id:res.id,
+      name:res.name,
+      scanTime:new Date().toISOString()
     };
 
-    document.getElementById("sid").innerText = res.id;
-    document.getElementById("name").innerText = res.name;
+    document.getElementById("sid").innerText=res.id;
+    document.getElementById("name").innerText=res.name;
+  })
+  .catch(err=>{
+    alert("Server error: "+err.message);
+    startScanner();
   });
 }
 
@@ -147,14 +126,14 @@ function lookup(id){
 
 function saveEntry(){
 
-  if(!currentEntry) return;
+  if(!currentEntry)return;
 
   apiCall("reserve",{
-    id: currentEntry.id,
-    device: navigator.userAgent
+    id:currentEntry.id,
+    device:navigator.userAgent
   }).then(res=>{
 
-    if(!res || res.status!=="OK"){
+    if(!res||res.status!=="OK"){
       alert("Duplicate");
       startScanner();
       return;
@@ -162,10 +141,10 @@ function saveEntry(){
 
     entries.push(currentEntry);
     localIds.add(currentEntry.id);
-    currentEntry = null;
+    currentEntry=null;
 
     updateCount();
-    document.getElementById("card").hidden = true;
+    document.getElementById("card").hidden=true;
     startScanner();
   });
 }
@@ -173,8 +152,8 @@ function saveEntry(){
 /* ================= CLEAR ================= */
 
 function clearEntry(){
-  currentEntry = null;
-  document.getElementById("card").hidden = true;
+  currentEntry=null;
+  document.getElementById("card").hidden=true;
   startScanner();
 }
 
@@ -182,35 +161,31 @@ function clearEntry(){
 
 function pushAll(){
 
-  const v = document.getElementById("volunteer").value.trim();
+  const v=document.getElementById("volunteer").value.trim();
 
-  if(!v || !entries.length){
+  if(!v||!entries.length){
     alert("Missing data");
     return;
   }
 
   apiCall("push",{entries,volunteer:v}).then(res=>{
-
-    if(res && res.status==="OK"){
+    if(res&&res.status==="OK"){
       alert(res.count+" pushed");
       entries=[];
       localIds.clear();
       updateCount();
-    } else {
+    }else{
       alert("Push failed");
     }
   });
 }
 
 function updateCount(){
-  document.getElementById("count").innerText =
-    "Stored: " + entries.length;
+  document.getElementById("count").innerText="Stored: "+entries.length;
 }
 
-window.onload = startScanner;
+window.onload=startScanner;
 
 </script>
-
 </body>
 </html>
-
