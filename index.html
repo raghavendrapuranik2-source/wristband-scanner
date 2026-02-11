@@ -26,26 +26,37 @@
 
 const API="https://script.google.com/macros/s/AKfycbx6iLnvuQIXfnYXDuqjkyPjkzok7DI8Fh1WavKQUPNJPpR2yA3kigUeyQuFxGg7wFWr6Q/exec";
 
-let scanner,currentEntry=null,entries=[],localIds=new Set();
+let scanner;
+let MASTER_MAP = {};
+let currentEntry=null;
+let entries=[];
+let localIds=new Set();
+
+/* ================= LOAD MASTER ON PAGE LOAD ================= */
+
+function loadMaster(){
+  return apiCall("getMaster",{}).then(res=>{
+    if(res.status==="OK"){
+      MASTER_MAP = res.data;
+    }else{
+      alert("Failed to load master list");
+    }
+  });
+}
+
+/* ================= API CALL ================= */
 
 function apiCall(action,data){
-
   const params=new URLSearchParams();
   params.append("action",action);
   for(let k in data){
-    params.append(k,
-      typeof data[k]==="object"
-      ? JSON.stringify(data[k])
-      : data[k]);
+    params.append(k,data[k]);
   }
-
   return fetch(API,{method:"POST",body:params})
-    .then(res=>res.text())
-    .then(text=>{
-      try{return JSON.parse(text);}
-      catch{return {status:"ERROR",message:text};}
-    });
+    .then(r=>r.json());
 }
+
+/* ================= SCANNER ================= */
 
 function startScanner(){
   scanner=new Html5Qrcode("reader");
@@ -62,39 +73,46 @@ function stopScanner(cb){
   scanner.stop().then(()=>{scanner.clear();scanner=null;cb();});
 }
 
+/* ================= LOOKUP ================= */
+
 function lookup(id){
 
   document.getElementById("sid").innerText="";
-  document.getElementById("name").innerText="Loading...";
+  document.getElementById("name").innerText="Checking...";
   document.getElementById("card").hidden=false;
 
-  apiCall("lookup",{id}).then(res=>{
+  // 1️⃣ Check Master locally
+  if(!MASTER_MAP[id]){
+    alert("INVALID ID");
+    startScanner();
+    return;
+  }
 
-    if(res.status!=="OK"){
-      alert(res.message||res.status);
+  // 2️⃣ Check reservation from server
+  apiCall("checkReservation",{id}).then(res=>{
+
+    if(res.status==="DUPLICATE"){
+      alert("DUPLICATE");
       startScanner();
       return;
     }
 
     currentEntry={
-      id:res.id,
-      name:res.name,
+      id:id,
+      name:MASTER_MAP[id],
       scanTime:new Date().toISOString()
     };
 
-    document.getElementById("sid").innerText=res.id;
-    document.getElementById("name").innerText=res.name;
+    document.getElementById("sid").innerText=id;
+    document.getElementById("name").innerText=MASTER_MAP[id];
   });
 }
 
+/* ================= NEXT ================= */
+
 function saveEntry(){
   apiCall("reserve",{id:currentEntry.id,device:navigator.userAgent})
-  .then(res=>{
-    if(res.status!=="OK"){
-      alert("Duplicate");
-      startScanner();
-      return;
-    }
+  .then(()=>{
     entries.push(currentEntry);
     localIds.add(currentEntry.id);
     currentEntry=null;
@@ -112,7 +130,7 @@ function clearEntry(){
 
 function pushAll(){
   const v=document.getElementById("volunteer").value.trim();
-  apiCall("push",{entries,volunteer:v})
+  apiCall("push",{entries:JSON.stringify(entries),volunteer:v})
   .then(res=>{
     alert(res.count+" pushed");
     entries=[];
@@ -125,14 +143,14 @@ function updateCount(){
   document.getElementById("count").innerText="Stored: "+entries.length;
 }
 
-window.onload=startScanner;
+/* ================= INIT ================= */
+
+window.onload=()=>{
+  loadMaster().then(()=>{
+    startScanner();
+  });
+};
 
 </script>
 </body>
 </html>
-
-
-
-
-
-
